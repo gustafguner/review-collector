@@ -3,6 +3,7 @@ import * as bodyParser from 'body-parser';
 import * as cors from 'cors';
 import * as dotenv from 'dotenv';
 dotenv.config();
+import * as request from 'request';
 const SlackBot = require('slackbots');
 
 const PORT = process.env.PORT || 4000;
@@ -40,9 +41,24 @@ bot.on('message', (data: any) => {
   }
 });
 
-app.post('/connect', (req, res) => {
-  const code = req.body.code;
-  res.json({ success: true });
+app.get('/slack/oauth2/redirect', (req, res) => {
+  const code = req.query.code;
+
+  const options = {
+    uri: `https://slack.com/api/oauth.access?code=${code}&client_id=${
+      process.env.SLACK_APP_CLIENT_ID
+    }&client_secret=${process.env.SLACK_APP_CLIENT_SECRET}`,
+    json: true,
+    method: 'GET',
+  };
+
+  request(options, (error, response, body) => {
+    if (body.ok === true) {
+      res.redirect('http://localhost:8000/onboarding/github');
+    } else {
+      res.redirect('http://localhost:8000/onboarding/error');
+    }
+  });
 });
 
 app.listen(PORT, () => {
