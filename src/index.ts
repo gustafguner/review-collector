@@ -74,7 +74,7 @@ app.post('/commands/watching', async (req, res) => {
     return;
   }
 
-  const repoNames = team.repos.map((repo) => `*${repo.name}*`);
+  const repoNames = team.repos.map((repo) => `*${repo.repo_name}*`);
 
   axios({
     method: 'post',
@@ -113,7 +113,7 @@ app.post('/commands/unwatch', async (req, res) => {
     return;
   }
 
-  const repo = team.repos.find((repo) => repo.name === repoName);
+  const repo = team.repos.find((repo) => repo.repo_name === repoName);
 
   if (!repo) {
     console.log('Error finding repo');
@@ -122,8 +122,21 @@ app.post('/commands/unwatch', async (req, res) => {
 
   const repoIndex = team.repos.indexOf(repo);
 
+  const [githubRepoErr, githubRepo] = await to(
+    github.getRepoById(repo.repo_id),
+  );
+
+  if (githubRepoErr || !githubRepo) {
+    console.log('Error');
+    return;
+  }
+
   const [deleteErr] = await to(
-    github.deleteWebhook(githubUser.data.login, repoName, repo.hook_id),
+    github.deleteWebhook(
+      githubUser.data.login,
+      githubRepo.data.name,
+      repo.hook_id,
+    ),
   );
 
   if (deleteErr) {
@@ -201,9 +214,19 @@ app.post('/commands/watch', async (req, res) => {
     });
   }
 
+  const [githubRepoError, githubRepo] = await to(
+    github.getRepo(githubUser.data.login, repoName),
+  );
+
+  if (githubRepoError || !githubRepo) {
+    console.log('Error');
+    return;
+  }
+
   team.repos.push({
     hook_id: githubWebhook.data.id,
-    name: repoName,
+    repo_name: repoName,
+    repo_id: githubRepo.data.id,
   });
 
   const [saveError] = await to(team.save());

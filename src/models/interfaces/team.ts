@@ -2,7 +2,8 @@ import * as mongoose from 'mongoose';
 
 interface Repo {
   hook_id: number;
-  name: string;
+  repo_name: string;
+  repo_id: number;
 }
 
 export interface ITeam extends mongoose.Document {

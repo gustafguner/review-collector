@@ -11,6 +11,17 @@ class GitHub {
     return this.apiRequest('get', 'https://api.github.com/user');
   }
 
+  public getRepo(owner: string, repo: string) {
+    return this.apiRequest(
+      'get',
+      `https://api.github.com/repos/${owner}/${repo}`,
+    );
+  }
+
+  public getRepoById(id: number) {
+    return this.apiRequest('get', `https://api.github.com/repositories/${id}`);
+  }
+
   public addWebhook(owner: string, repo: string) {
     return this.apiRequest(
       'post',

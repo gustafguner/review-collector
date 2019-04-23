@@ -4,7 +4,8 @@ import { ITeam } from './interfaces/team';
 
 const Repo = {
   hook_id: { type: Number, requred: true },
-  name: { type: String, required: true },
+  repo_name: { type: String, required: true },
+  repo_id: { type: Number, required: true },
 };
 
 export const TeamSchema = new mongoose.Schema({
