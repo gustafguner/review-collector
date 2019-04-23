@@ -54,7 +54,96 @@ bot.on('message', (message: any) => {
   if (message.type !== 'message') {
     return;
   }
-  console.log(message);
+  // console.log(message);
+});
+
+app.post('/commands/watch', async (req, res) => {
+  const teamId = req.body.team_id;
+  const repoName = req.body.text;
+  const responseUrl = req.body.response_url;
+
+  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
+
+  if (err || !team) {
+    console.log('Error');
+    return;
+  }
+
+  console.log(team);
+
+  const [githubUserError, githubUser] = await to(
+    axios({
+      method: 'get',
+      url: 'https://api.github.com/user',
+      headers: {
+        accept: 'application/json',
+        Authorization: `token ${team.github_access_token}`,
+      },
+    }),
+  );
+
+  if (githubUserError || !githubUser) {
+    console.log('Error');
+    return;
+  }
+
+  const [githubWebhookError, githubWebhook] = await to(
+    axios({
+      method: 'post',
+      url: `https://api.github.com/repos/${
+        githubUser.data.login
+      }/${repoName}/hooks`,
+      headers: {
+        accept: 'application/json',
+        Authorization: `token ${team.github_access_token}`,
+      },
+      data: {
+        name: 'web',
+        active: true,
+        events: ['push', 'pull_request'],
+        config: {
+          url: 'http://example.com/webhook',
+          content_type: 'json',
+        },
+      },
+    }),
+  );
+
+  console.log(
+    `https://api.github.com/repos/${githubUser.data.login}/${repoName}/hooks`,
+  );
+
+  if (githubWebhookError) {
+    axios({
+      method: 'post',
+      url: responseUrl,
+      headers: {
+        accept: 'application/json',
+      },
+      data: {
+        response_type: 'in_channel',
+        text: `:crying_cat_face: An error occured! Did you spell your repository name \`${repoName}\` correct?`,
+      },
+    });
+    return;
+  }
+
+  console.log(githubUser.data);
+
+  // console.log(req.body);
+  console.log(`The team ${teamId} want to watch the repository ${repoName}`);
+
+  axios({
+    method: 'post',
+    url: responseUrl,
+    headers: {
+      accept: 'application/json',
+    },
+    data: {
+      response_type: 'in_channel',
+      text: `You are now watching ${repoName}`,
+    },
+  });
 });
 
 app.post('/github/webhook', (req, res) => {
