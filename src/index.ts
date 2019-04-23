@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import axios from 'axios';
 import to from 'await-to-js';
+import GitHub from './utils/github';
 
 import Team from './models/team';
 
@@ -57,6 +58,95 @@ bot.on('message', (message: any) => {
   // console.log(message);
 });
 
+app.post('/commands/watching', async (req, res) => {
+  const teamId = req.body.team_id;
+  const responseUrl = req.body.response_url;
+
+  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
+
+  if (err || !team || !team.github_access_token) {
+    console.log('Error finding team');
+    return;
+  }
+
+  const repoNames = team.repos.map((repo) => `*${repo.name}*`);
+
+  axios({
+    method: 'post',
+    url: responseUrl,
+    headers: {
+      accept: 'application/json',
+    },
+    data: {
+      response_type: 'in_channel',
+      text:
+        repoNames.length !== 0
+          ? `You're watching ${repoNames.join(', ')}`
+          : `You're not watching any repositories.`,
+    },
+  });
+});
+
+app.post('/commands/unwatch', async (req, res) => {
+  const teamId = req.body.team_id;
+  const repoName = req.body.text;
+  const responseUrl = req.body.response_url;
+
+  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
+
+  if (err || !team || !team.github_access_token) {
+    console.log('Error finding team');
+    return;
+  }
+
+  const github = new GitHub(team.github_access_token);
+  const [githubUserError, githubUser] = await to(github.getUser());
+
+  if (githubUserError || !githubUser) {
+    console.log('Error getting user');
+    return;
+  }
+
+  const repo = team.repos.find((repo) => repo.name === repoName);
+
+  if (!repo) {
+    console.log('Error finding repo');
+    return;
+  }
+
+  const repoIndex = team.repos.indexOf(repo);
+
+  const [deleteErr] = await to(
+    github.deleteWebhook(githubUser.data.login, repoName, repo.hook_id),
+  );
+
+  if (deleteErr) {
+    console.log('Error deleting webhook');
+    return;
+  }
+
+  team.repos.splice(repoIndex, 1);
+
+  const [saveErr] = await to(team.save());
+
+  if (saveErr) {
+    console.log('Error saving team');
+    return;
+  }
+
+  axios({
+    method: 'post',
+    url: responseUrl,
+    headers: {
+      accept: 'application/json',
+    },
+    data: {
+      response_type: 'in_channel',
+      text: `:new_moon_with_face: You're not watching *${repoName}* anymore`,
+    },
+  });
+});
+
 app.post('/commands/watch', async (req, res) => {
   const teamId = req.body.team_id;
   const repoName = req.body.text;
@@ -64,23 +154,14 @@ app.post('/commands/watch', async (req, res) => {
 
   const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
 
-  if (err || !team) {
+  if (err || !team || !team.github_access_token) {
     console.log('Error');
     return;
   }
 
-  console.log(team);
+  const github = new GitHub(team.github_access_token);
 
-  const [githubUserError, githubUser] = await to(
-    axios({
-      method: 'get',
-      url: 'https://api.github.com/user',
-      headers: {
-        accept: 'application/json',
-        Authorization: `token ${team.github_access_token}`,
-      },
-    }),
-  );
+  const [githubUserError, githubUser] = await to(github.getUser());
 
   if (githubUserError || !githubUser) {
     console.log('Error');
@@ -88,33 +169,15 @@ app.post('/commands/watch', async (req, res) => {
   }
 
   const [githubWebhookError, githubWebhook] = await to(
-    axios({
-      method: 'post',
-      url: `https://api.github.com/repos/${
-        githubUser.data.login
-      }/${repoName}/hooks`,
-      headers: {
-        accept: 'application/json',
-        Authorization: `token ${team.github_access_token}`,
-      },
-      data: {
-        name: 'web',
-        active: true,
-        events: ['push', 'pull_request'],
-        config: {
-          url: 'http://example.com/webhook',
-          content_type: 'json',
-        },
-      },
-    }),
+    github.addWebhook(githubUser.data.login, repoName),
   );
 
   console.log(
     `https://api.github.com/repos/${githubUser.data.login}/${repoName}/hooks`,
   );
 
-  if (githubWebhookError) {
-    axios({
+  if (githubWebhookError || !githubWebhook) {
+    return axios({
       method: 'post',
       url: responseUrl,
       headers: {
@@ -125,13 +188,28 @@ app.post('/commands/watch', async (req, res) => {
         text: `:crying_cat_face: An error occured! Did you spell your repository name \`${repoName}\` correct?`,
       },
     });
-    return;
   }
 
-  console.log(githubUser.data);
+  team.repos.push({
+    hook_id: githubWebhook.data.id,
+    name: repoName,
+  });
 
-  // console.log(req.body);
-  console.log(`The team ${teamId} want to watch the repository ${repoName}`);
+  const [saveError] = await to(team.save());
+
+  if (saveError) {
+    return axios({
+      method: 'post',
+      url: responseUrl,
+      headers: {
+        accept: 'application/json',
+      },
+      data: {
+        response_type: 'in_channel',
+        text: `:crying_cat_face: An unexpected error occured.`,
+      },
+    });
+  }
 
   axios({
     method: 'post',
@@ -141,7 +219,7 @@ app.post('/commands/watch', async (req, res) => {
     },
     data: {
       response_type: 'in_channel',
-      text: `You are now watching ${repoName}`,
+      text: `:eyes: You are now watching *${repoName}*`,
     },
   });
 });
