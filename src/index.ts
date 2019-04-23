@@ -59,6 +59,11 @@ bot.on('message', (message: any) => {
 });
 
 app.post('/commands/watching', async (req, res) => {
+  res.send({
+    status: 200,
+    text: 'Let me check...',
+  });
+
   const teamId = req.body.team_id;
   const responseUrl = req.body.response_url;
 
@@ -78,7 +83,6 @@ app.post('/commands/watching', async (req, res) => {
       accept: 'application/json',
     },
     data: {
-      response_type: 'in_channel',
       text:
         repoNames.length !== 0
           ? `You're watching ${repoNames.join(', ')}`
@@ -88,6 +92,8 @@ app.post('/commands/watching', async (req, res) => {
 });
 
 app.post('/commands/unwatch', async (req, res) => {
+  res.sendStatus(200);
+
   const teamId = req.body.team_id;
   const repoName = req.body.text;
   const responseUrl = req.body.response_url;
@@ -148,6 +154,11 @@ app.post('/commands/unwatch', async (req, res) => {
 });
 
 app.post('/commands/watch', async (req, res) => {
+  res.send({
+    status: 200,
+    text: 'Let me check...',
+  });
+
   const teamId = req.body.team_id;
   const repoName = req.body.text;
   const responseUrl = req.body.response_url;
@@ -225,9 +236,26 @@ app.post('/commands/watch', async (req, res) => {
 });
 
 app.post('/github/webhook', (req, res) => {
-  console.log('HIT!');
-  console.log(req.body);
-  res.send(202);
+  console.log('Webhook hit!');
+  // console.log(req.body);
+  const action = req.body.action;
+
+  if (action !== 'review_requested') {
+    // review_request_removed?
+    return res.sendStatus(202);
+  }
+
+  const prAuthor = req.body.pull_request.user.login;
+  const requested_reviewers = req.body.pull_request.requested_reviewers;
+
+  requested_reviewers.forEach((reviewer: any) => {
+    bot.postMessageToChannel(
+      'general',
+      `${prAuthor} wants ${reviewer.login} to review their PR.`,
+    );
+  });
+
+  res.sendStatus(202);
 });
 
 app.get('/slack/oauth2/redirect', async (req, res) => {
