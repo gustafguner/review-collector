@@ -7,14 +7,17 @@ dotenv.config();
 import axios from 'axios';
 import to from 'await-to-js';
 import GitHub from './utils/github';
-
 import Team from './models/team';
 
-const SlackBot = require('slackbots');
+import { WebClient } from '@slack/web-api';
 
-const PORT = process.env.PORT || 4000;
+const { createEventAdapter } = require('@slack/events-api');
+const slackEvents = createEventAdapter(process.env.SLACK_APP_SIGNING_SECRET);
 
-console.log(process.env.MONGODB_URL);
+const { createMessageAdapter } = require('@slack/interactive-messages');
+const slackInteractions = createMessageAdapter(
+  process.env.SLACK_APP_SIGNING_SECRET,
+);
 
 mongoose
   .connect(process.env.MONGODB_URL!, {
@@ -38,24 +41,50 @@ app.use(bodyParser.json());
 
 app.use(cors());
 
-const bot = new SlackBot({
-  token: process.env.SLACK_BOT_TOKEN,
-  name: 'review-bot',
-});
+const PORT = process.env.PORT || 4000;
 
-bot.on('start', () => {
-  const params = {
-    icon_emoji: ':cat:',
-  };
+const web = new WebClient(process.env.SLACK_BOT_TOKEN);
 
-  bot.postMessageToChannel('general', 'meow!', params);
-});
+app.use('/slack/events', slackEvents.expressMiddleware());
+app.use('/slack/actions', slackInteractions.expressMiddleware());
 
-bot.on('message', (message: any) => {
-  if (message.type !== 'message') {
+app.post('/commands/connect', async (req, res) => {
+  const slackUserId = req.body.user_id;
+  const userName = req.body.user_name;
+  const teamId = req.body.team_id;
+  const responseUrl = req.body.response_url;
+
+  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
+
+  if (err || !team || !team.github_access_token) {
+    console.log('Error finding team');
     return;
   }
-  // console.log(message);
+
+  web.chat.postMessage({
+    channel: 'general',
+    text: `Please connect your Slack username to your GitHub username`,
+    attachment_type: 'default',
+    attachments: [
+      {
+        callback_id: 'github-connection',
+        text: '',
+        color: 'good',
+        actions: [
+          {
+            name: 'github-connect',
+            style: 'primary',
+            text: 'Connect with GitHub',
+            type: 'button',
+            value: 'github-connect',
+            url: `https://github.com/login/oauth/authorize?client_id=16466a53ce26b858fa89&scope=user&redirect_uri=http://localhost:4000/github/slack/oauth2/redirect?payload=${
+              team._id
+            }$${slackUserId}`,
+          },
+        ],
+      },
+    ],
+  });
 });
 
 app.post('/commands/watching', async (req, res) => {
@@ -196,10 +225,6 @@ app.post('/commands/watch', async (req, res) => {
     github.addWebhook(githubUser.data.login, repoName),
   );
 
-  console.log(
-    `https://api.github.com/repos/${githubUser.data.login}/${repoName}/hooks`,
-  );
-
   if (githubWebhookError || !githubWebhook) {
     return axios({
       method: 'post',
@@ -272,10 +297,10 @@ app.post('/github/webhook', (req, res) => {
   const requested_reviewers = req.body.pull_request.requested_reviewers;
 
   requested_reviewers.forEach((reviewer: any) => {
-    bot.postMessageToChannel(
-      'general',
-      `${prAuthor} wants ${reviewer.login} to review their PR.`,
-    );
+    web.chat.postMessage({
+      channel: 'general',
+      text: `${prAuthor} wants ${reviewer.login} to review their PR.`,
+    });
   });
 
   res.sendStatus(202);
@@ -333,6 +358,74 @@ app.get('/slack/oauth2/redirect', async (req, res) => {
   }
 
   return res.redirect(`http://localhost:8000/onboarding/github?id=${team._id}`);
+});
+
+app.get('/github/slack/oauth2/redirect', async (req, res) => {
+  const payload = req.query.payload;
+  const teamId = payload.split('$')[0];
+  const slackUserId = payload.split('$')[1];
+  const code = req.query.code;
+
+  console.log(slackUserId);
+
+  console.log(teamId);
+
+  const [err, response] = await to(
+    axios({
+      method: 'post',
+      url: `https://github.com/login/oauth/access_token?client_id=${
+        process.env.GITHUB_SLACK_CLIENT_ID
+      }&client_secret=${process.env.GITHUB_SLACK_CLIENT_SECRET}&code=${code}`,
+      headers: {
+        accept: 'application/json',
+      },
+    }),
+  );
+
+  if (err || !response) {
+    console.log('Error getting access token');
+    return res.json({ success: false });
+  }
+
+  const github = new GitHub(response.data.access_token);
+
+  const [githubUserError, githubUser] = await to(github.getUser());
+
+  if (githubUserError || !githubUser) {
+    console.log('Error getting GitHub user');
+    return res.json({ success: false });
+  }
+
+  const githubUserId = githubUser.data.id;
+
+  const [teamError, team] = await to(Team.findById(teamId).exec());
+
+  if (teamError || !team) {
+    console.log('Error finding team');
+    return res.json({ success: false });
+  }
+
+  const newTeamUsers = team.users.filter(
+    (user: any) =>
+      user.slack_id !== slackUserId && user.github_id !== githubUserId,
+  );
+  newTeamUsers.push({
+    slack_id: slackUserId,
+    github_id: githubUserId,
+  });
+
+  console.log(newTeamUsers);
+
+  team.users = newTeamUsers;
+
+  const [teamSaveError] = await to(team.save());
+
+  if (teamSaveError) {
+    console.log('Error saving');
+    return res.json({ success: false });
+  }
+
+  res.redirect('http://localhost:8000/onboarding/done'); // TODO: change
 });
 
 app.get('/github/oauth2/redirect', async (req, res) => {

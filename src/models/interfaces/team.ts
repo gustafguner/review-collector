@@ -6,6 +6,11 @@ interface Repo {
   repo_id: number;
 }
 
+interface User {
+  slack_id: string;
+  github_id: string;
+}
+
 export interface ITeam extends mongoose.Document {
   slack_team_id: string;
   slack_team_name: string;
@@ -13,4 +18,5 @@ export interface ITeam extends mongoose.Document {
   slack_scope: string;
   github_access_token?: string;
   repos: Repo[];
+  users: User[];
 }
