@@ -14,6 +14,18 @@ import { ITeam } from './models/interfaces/team';
 const { createEventAdapter } = require('@slack/events-api');
 const { createMessageAdapter } = require('@slack/interactive-messages');
 
+if (
+  !process.env.MONGODB_URL ||
+  !process.env.MONGODB_USERNAME ||
+  !process.env.MONGODB_PASSWORD ||
+  !process.env.SLACK_BOT_TOKEN ||
+  !process.env.SLACK_APP_SIGNING_SECRET ||
+  !process.env.SLACK_APP_CLIENT_ID ||
+  !process.env.SLACK_APP_CLIENT_SECRET
+) {
+  throw new Error('❌ Your .env file is insufficient');
+}
+
 mongoose
   .connect(process.env.MONGODB_URL!, {
     auth: {
@@ -31,13 +43,6 @@ mongoose
 
 const app = express();
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
-
-app.use(cors());
-
-const PORT = process.env.PORT || 4000;
-
 const web = new WebClient(process.env.SLACK_BOT_TOKEN);
 const slackEvents = createEventAdapter(process.env.SLACK_APP_SIGNING_SECRET);
 const slackInteractions = createMessageAdapter(
@@ -47,8 +52,16 @@ const slackInteractions = createMessageAdapter(
 app.use('/slack/events', slackEvents.expressMiddleware());
 app.use('/slack/actions', slackInteractions.expressMiddleware());
 
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+app.use(cors());
+
+const PORT = process.env.PORT || 4000;
+
 app.post('/commands/connect', async (req, res) => {
   const slackUserId = req.body.user_id;
+  const channelId = req.body.channel_id;
   const teamId = req.body.team_id;
 
   const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
@@ -63,16 +76,16 @@ app.post('/commands/connect', async (req, res) => {
     attachment_type: 'default',
     attachments: [
       {
-        callback_id: 'github-connection',
+        callback_id: 'github_connect',
         text: '',
         color: 'good',
         actions: [
           {
-            name: 'github-connect',
+            name: 'github_connect',
             style: 'primary',
             text: 'Connect with GitHub',
             type: 'button',
-            value: 'github-connect',
+            value: 'connect',
             url: `https://github.com/login/oauth/authorize?client_id=16466a53ce26b858fa89&scope=user&redirect_uri=http://localhost:4000/github/slack/oauth2/redirect?payload=${
               team._id
             }$${slackUserId}`,
@@ -359,11 +372,15 @@ app.get('/slack/oauth2/redirect', async (req, res) => {
     return res.redirect('http://localhost:8000/onboarding/error');
   }
 
+  console.log(body);
+
   if (!foundTeam) {
     const newTeam = new Team({
       slack_team_id: body.team_id,
       slack_team_name: body.team_name,
       slack_access_token: body.access_token,
+      slack_bot_access_token: body.bot.bot_access_token,
+      slack_bot_user_id: body.bot.bot_user_id,
       slack_scope: body.scope,
     });
 
@@ -371,6 +388,8 @@ app.get('/slack/oauth2/redirect', async (req, res) => {
   } else {
     foundTeam.slack_team_name = body.team_name;
     foundTeam.slack_access_token = body.access_token;
+    foundTeam.slack_bot_access_token = body.bot.bot_access_token;
+    foundTeam.slack_bot_user_id = body.bot.bot_user_id;
     foundTeam.slack_scope = body.scope;
 
     [err, team] = await to(foundTeam.save());
@@ -411,6 +430,8 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
   const [githubUserError, githubUser] = await to(github.getUser());
 
   if (githubUserError || !githubUser) {
+    console.log(githubUserError);
+    console.log(githubUser);
     console.log('Error getting GitHub user');
     return res.json({ success: false });
   }
@@ -433,8 +454,6 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
     github_id: githubUserId,
   });
 
-  console.log(newTeamUsers);
-
   team.users = newTeamUsers;
 
   const [teamSaveError] = await to(team.save());
@@ -443,6 +462,26 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
     console.log('Error saving');
     return res.json({ success: false });
   }
+
+  const [dmErr, dmResponse] = await to(
+    web.im.open({
+      token: team.slack_access_token,
+      user: team.slack_bot_user_id,
+    }),
+  );
+
+  if (dmErr || !dmResponse) {
+    return res.sendStatus(500);
+  }
+
+  const dm: any = dmResponse;
+
+  web.chat.postMessage({
+    token: team.slack_access_token,
+    channel: dm.channel.id,
+    text:
+      ':white_check_mark: Your GitHub and Slack accounts are now connected!',
+  });
 
   res.redirect('http://localhost:8000/onboarding/done'); // TODO: change
 });
@@ -486,4 +525,10 @@ app.get('/github/oauth2/redirect', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is listening on port ${PORT}`);
+});
+
+slackInteractions.action('github_connect', (req: any, res: any) => {
+  console.log('hit!');
+  console.log(req);
+  return 1;
 });
