@@ -10,14 +10,9 @@ import GitHub from './utils/github';
 import Team from './models/team';
 
 import { WebClient } from '@slack/web-api';
-
+import { ITeam } from './models/interfaces/team';
 const { createEventAdapter } = require('@slack/events-api');
-const slackEvents = createEventAdapter(process.env.SLACK_APP_SIGNING_SECRET);
-
 const { createMessageAdapter } = require('@slack/interactive-messages');
-const slackInteractions = createMessageAdapter(
-  process.env.SLACK_APP_SIGNING_SECRET,
-);
 
 mongoose
   .connect(process.env.MONGODB_URL!, {
@@ -44,6 +39,10 @@ app.use(cors());
 const PORT = process.env.PORT || 4000;
 
 const web = new WebClient(process.env.SLACK_BOT_TOKEN);
+const slackEvents = createEventAdapter(process.env.SLACK_APP_SIGNING_SECRET);
+const slackInteractions = createMessageAdapter(
+  process.env.SLACK_APP_SIGNING_SECRET,
+);
 
 app.use('/slack/events', slackEvents.expressMiddleware());
 app.use('/slack/actions', slackInteractions.expressMiddleware());
@@ -283,9 +282,8 @@ app.post('/commands/watch', async (req, res) => {
   });
 });
 
-app.post('/github/webhook', (req, res) => {
+app.post('/github/webhook', async (req, res) => {
   console.log('Webhook hit!');
-  // console.log(req.body);
   const action = req.body.action;
 
   if (action !== 'review_requested') {
@@ -293,13 +291,39 @@ app.post('/github/webhook', (req, res) => {
     return res.sendStatus(202);
   }
 
-  const prAuthor = req.body.pull_request.user.login;
-  const requested_reviewers = req.body.pull_request.requested_reviewers;
+  const repoId = req.body.repository.id;
 
-  requested_reviewers.forEach((reviewer: any) => {
+  const [err, teams] = await to(Team.find({ 'repos.repo_id': repoId }).exec());
+
+  if (err || !teams) {
+    console.log('Error finding teams');
+    return res.sendStatus(500);
+  }
+
+  const requester = req.body.pull_request.user;
+  const reviewer = req.body.requested_reviewer;
+  console.log(reviewer.id);
+
+  teams.forEach((team: ITeam) => {
+    const requesterSlackUser = team.users.find(
+      (user: any) => user.github_id === requester.id,
+    );
+    const reviewerSlackUser = team.users.find(
+      (user: any) => user.github_id === reviewer.id,
+    );
+
+    if (!requesterSlackUser || !reviewerSlackUser) {
+      return;
+    }
+
+    // console.log(requesterSlackUser);
+    // console.log(reviewerSlackUser);
+
     web.chat.postMessage({
-      channel: 'general',
-      text: `${prAuthor} wants ${reviewer.login} to review their PR.`,
+      token: team.slack_access_token,
+      channel: reviewerSlackUser.slack_id,
+      as_user: false,
+      text: `${requester.login} just requested a review from you!`,
     });
   });
 
@@ -365,10 +389,6 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
   const teamId = payload.split('$')[0];
   const slackUserId = payload.split('$')[1];
   const code = req.query.code;
-
-  console.log(slackUserId);
-
-  console.log(teamId);
 
   const [err, response] = await to(
     axios({

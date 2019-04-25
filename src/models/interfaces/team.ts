@@ -8,7 +8,7 @@ interface Repo {
 
 interface User {
   slack_id: string;
-  github_id: string;
+  github_id: number;
 }
 
 export interface ITeam extends mongoose.Document {

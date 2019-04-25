@@ -10,7 +10,7 @@ const Repo = {
 
 const User = {
   slack_id: { type: String, required: true },
-  github_id: { type: String, required: true },
+  github_id: { type: Number, required: true },
 };
 
 export const TeamSchema = new mongoose.Schema({
