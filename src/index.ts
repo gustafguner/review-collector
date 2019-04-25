@@ -295,11 +295,12 @@ app.post('/commands/watch', async (req, res) => {
 });
 
 app.post('/github/webhook', async (req, res) => {
-  console.log('Webhook hit!');
   const action = req.body.action;
 
   if (action !== 'review_requested') {
     // review_request_removed?
+    // re_request
+    // merge?
     return res.sendStatus(202);
   }
 
@@ -312,11 +313,12 @@ app.post('/github/webhook', async (req, res) => {
     return res.sendStatus(500);
   }
 
-  const requester = req.body.pull_request.user;
+  const requester = req.body.sender;
+  const pullRequest = req.body.pull_request;
+  const repository = req.body.repository;
   const reviewer = req.body.requested_reviewer;
-  console.log(reviewer.id);
 
-  teams.forEach((team: ITeam) => {
+  teams.forEach(async (team: ITeam) => {
     const requesterSlackUser = team.users.find(
       (user: any) => user.github_id === requester.id,
     );
@@ -328,14 +330,37 @@ app.post('/github/webhook', async (req, res) => {
       return;
     }
 
-    // console.log(requesterSlackUser);
-    // console.log(reviewerSlackUser);
+    const [dmErr, dmResponse] = await to(
+      web.im.open({
+        token: team.slack_bot_access_token,
+        user: reviewerSlackUser.slack_id,
+      }),
+    );
 
+    if (dmErr || !dmResponse) {
+      return res.sendStatus(500);
+    }
+
+    const dm: any = dmResponse;
     web.chat.postMessage({
-      token: team.slack_access_token,
-      channel: reviewerSlackUser.slack_id,
-      as_user: false,
-      text: `${requester.login} just requested a review from you!`,
+      token: team.slack_bot_access_token,
+      channel: dm.channel.id,
+      text: ' ',
+      attachments: [
+        {
+          color: 'good',
+          pretext: `<@${requesterSlackUser.slack_id}> wants you to review this`,
+          author_name: pullRequest.user.login,
+          author_link: pullRequest.user.html_url,
+          author_icon: pullRequest.user.avatar_url,
+          title: pullRequest.title,
+          title_link: pullRequest.html_url,
+          text: pullRequest.body,
+          footer: repository.full_name,
+          thumb_url: repository.html_url,
+          ts: '123456789',
+        },
+      ],
     });
   });
 
@@ -465,8 +490,8 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
 
   const [dmErr, dmResponse] = await to(
     web.im.open({
-      token: team.slack_access_token,
-      user: team.slack_bot_user_id,
+      token: team.slack_bot_access_token,
+      user: slackUserId,
     }),
   );
 
@@ -477,10 +502,17 @@ app.get('/github/slack/oauth2/redirect', async (req, res) => {
   const dm: any = dmResponse;
 
   web.chat.postMessage({
-    token: team.slack_access_token,
+    token: team.slack_bot_access_token,
     channel: dm.channel.id,
-    text:
-      ':white_check_mark: Your GitHub and Slack accounts are now connected!',
+    text: ' ',
+    attachment_type: 'default',
+    attachments: [
+      {
+        title: 'Successfully connected',
+        text: 'You are now connected to GitHub! :confetti_ball:',
+        color: 'good',
+      },
+    ],
   });
 
   res.redirect('http://localhost:8000/onboarding/done'); // TODO: change
@@ -525,10 +557,4 @@ app.get('/github/oauth2/redirect', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is listening on port ${PORT}`);
-});
-
-slackInteractions.action('github_connect', (req: any, res: any) => {
-  console.log('hit!');
-  console.log(req);
-  return 1;
 });
