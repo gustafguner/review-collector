@@ -49,9 +49,7 @@ app.use('/slack/actions', slackInteractions.expressMiddleware());
 
 app.post('/commands/connect', async (req, res) => {
   const slackUserId = req.body.user_id;
-  const userName = req.body.user_name;
   const teamId = req.body.team_id;
-  const responseUrl = req.body.response_url;
 
   const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
 
@@ -60,8 +58,7 @@ app.post('/commands/connect', async (req, res) => {
     return;
   }
 
-  web.chat.postMessage({
-    channel: 'general',
+  const message = {
     text: `Please connect your Slack username to your GitHub username`,
     attachment_type: 'default',
     attachments: [
@@ -83,7 +80,9 @@ app.post('/commands/connect', async (req, res) => {
         ],
       },
     ],
-  });
+  };
+
+  res.status(200).json(message);
 });
 
 app.post('/commands/watching', async (req, res) => {
