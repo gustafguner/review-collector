@@ -29,7 +29,12 @@ class GitHub {
       {
         name: 'web',
         active: true,
-        events: ['push', 'pull_request'],
+        events: [
+          'push',
+          'pull_request',
+          'pull_request_review',
+          'pull_request_review_comment',
+        ],
         config: {
           url: 'https://review-collector.serveo.net/github/webhook',
           content_type: 'json',

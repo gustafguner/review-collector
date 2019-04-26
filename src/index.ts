@@ -279,7 +279,7 @@ app.post('/commands/watch', async (req, res) => {
 app.post('/github/webhook', async (req, res) => {
   const action = req.body.action;
 
-  if (action !== 'review_requested') {
+  if (action !== 'review_requested' && action !== 'submitted') {
     // review_request_removed?
     // re_request
     // merge?
@@ -293,6 +293,86 @@ app.post('/github/webhook', async (req, res) => {
   if (err || !teams) {
     console.log('Error finding teams');
     return res.sendStatus(500);
+  }
+
+  if (action === 'submitted') {
+    const reviewer = req.body.review.user;
+    const prAuthor = req.body.pull_request.user;
+    const pullRequest = req.body.pull_request;
+    const repository = req.body.repository;
+    const review = req.body.review;
+
+    teams.forEach(async (team: ITeam) => {
+      const reviewerSlackUser = team.users.find(
+        (user: any) => user.github_id === reviewer.id,
+      );
+      const prAuthorSlackUser = team.users.find(
+        (user: any) => user.github_id === prAuthor.id,
+      );
+
+      if (!reviewerSlackUser || !prAuthorSlackUser) {
+        return;
+      }
+
+      const [dmErr, dmResponse] = await to(
+        web.im.open({
+          token: team.slack_bot_access_token,
+          user: prAuthorSlackUser.slack_id,
+        }),
+      );
+
+      if (dmErr || !dmResponse) {
+        return res.sendStatus(500);
+      }
+
+      const dm: any = dmResponse;
+
+      interface ReviewStates {
+        [key: string]: ReviewState;
+      }
+
+      interface ReviewState {
+        title: string;
+        color: string;
+      }
+
+      const reviewStates: ReviewStates = {
+        approved: {
+          title: 'Approve',
+          color: 'good',
+        },
+        changes_requested: {
+          title: 'Changes requested',
+          color: 'warning',
+        },
+        commented: {
+          title: 'Comment',
+          color: '#595959',
+        },
+      };
+
+      console.log(review.state);
+
+      web.chat.postMessage({
+        token: team.slack_bot_access_token,
+        channel: dm.channel.id,
+        text: `<@${reviewerSlackUser.slack_id}> reviewed you pull request`,
+        attachments: [
+          {
+            mrkdwn_in: ['text'],
+            color: reviewStates[review.state].color,
+            author_name: `${reviewer.login}`,
+            author_icon: reviewer.avatar_url,
+            title: reviewStates[review.state].title,
+            title_link: review.html_url,
+            text: review.body.length !== 0 ? `"${review.body}"` : review.body,
+            footer: repository.full_name,
+          },
+        ],
+      });
+    });
+
+    return res.sendStatus(202);
   }
 
   const requester = req.body.sender;
@@ -324,6 +404,7 @@ app.post('/github/webhook', async (req, res) => {
     }
 
     const dm: any = dmResponse;
+
     web.chat.postMessage({
       token: team.slack_bot_access_token,
       channel: dm.channel.id,
