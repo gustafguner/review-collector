@@ -31,7 +31,7 @@ class GitHub {
         active: true,
         events: ['push', 'pull_request'],
         config: {
-          url: 'https://revolvo.serveo.net/github/webhook',
+          url: 'https://review-collector.serveo.net/github/webhook',
           content_type: 'json',
         },
       },

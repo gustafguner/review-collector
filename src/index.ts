@@ -99,11 +99,6 @@ app.post('/commands/connect', async (req, res) => {
 });
 
 app.post('/commands/watching', async (req, res) => {
-  res.send({
-    status: 200,
-    text: 'Let me check...',
-  });
-
   const teamId = req.body.team_id;
   const responseUrl = req.body.response_url;
 
@@ -116,24 +111,20 @@ app.post('/commands/watching', async (req, res) => {
 
   const repoNames = team.repos.map((repo) => `*${repo.repo_name}*`);
 
-  axios({
-    method: 'post',
-    url: responseUrl,
-    headers: {
-      accept: 'application/json',
-    },
-    data: {
-      text:
-        repoNames.length !== 0
-          ? `You're watching ${repoNames.join(', ')}`
-          : `You're not watching any repositories.`,
-    },
+  res.status(200).json({
+    text: ' ',
+    attachments: [
+      {
+        text:
+          repoNames.length !== 0
+            ? `You're watching ${repoNames.join(', ')}`
+            : `You're not watching any repositories.`,
+      },
+    ],
   });
 });
 
 app.post('/commands/unwatch', async (req, res) => {
-  res.sendStatus(200);
-
   const teamId = req.body.team_id;
   const repoName = req.body.text;
   const responseUrl = req.body.response_url;
@@ -193,25 +184,19 @@ app.post('/commands/unwatch', async (req, res) => {
     return;
   }
 
-  axios({
-    method: 'post',
-    url: responseUrl,
-    headers: {
-      accept: 'application/json',
-    },
-    data: {
-      response_type: 'in_channel',
-      text: `:new_moon_with_face: You're not watching *${repoName}* anymore`,
-    },
+  res.status(200).json({
+    text: ' ',
+    attachments: [
+      {
+        color: '#595959',
+        title: 'Stopped watching a repository',
+        text: `You're not watching *${repoName}* anymore :see_no_evil:`,
+      },
+    ],
   });
 });
 
 app.post('/commands/watch', async (req, res) => {
-  res.send({
-    status: 200,
-    text: 'Let me check...',
-  });
-
   const teamId = req.body.team_id;
   const repoName = req.body.text;
   const responseUrl = req.body.response_url;
@@ -237,16 +222,15 @@ app.post('/commands/watch', async (req, res) => {
   );
 
   if (githubWebhookError || !githubWebhook) {
-    return axios({
-      method: 'post',
-      url: responseUrl,
-      headers: {
-        accept: 'application/json',
-      },
-      data: {
-        response_type: 'in_channel',
-        text: `:crying_cat_face: An error occured! Did you spell your repository name \`${repoName}\` correct?`,
-      },
+    return res.status(200).json({
+      text: ' ',
+      attachments: [
+        {
+          color: 'danger',
+          title: 'Repository not found',
+          text: `I couldn't find that repository. Are you sure you own a repository named *${repoName}*?`,
+        },
+      ],
     });
   }
 
@@ -268,29 +252,27 @@ app.post('/commands/watch', async (req, res) => {
   const [saveError] = await to(team.save());
 
   if (saveError) {
-    return axios({
-      method: 'post',
-      url: responseUrl,
-      headers: {
-        accept: 'application/json',
-      },
-      data: {
-        response_type: 'in_channel',
-        text: `:crying_cat_face: An unexpected error occured.`,
-      },
+    return res.status(200).json({
+      text: ' ',
+      attachments: [
+        {
+          color: 'danger',
+          title: 'Unexprected error',
+          text: 'An unexpected error occured :crying_cat_face:',
+        },
+      ],
     });
   }
 
-  axios({
-    method: 'post',
-    url: responseUrl,
-    headers: {
-      accept: 'application/json',
-    },
-    data: {
-      response_type: 'in_channel',
-      text: `:eyes: You are now watching *${repoName}*`,
-    },
+  res.status(200).json({
+    text: ' ',
+    attachments: [
+      {
+        color: 'good',
+        title: 'Started watching a repository',
+        text: `You're now watching *${repoName}* :eyes:`,
+      },
+    ],
   });
 });
 
@@ -348,17 +330,30 @@ app.post('/github/webhook', async (req, res) => {
       text: ' ',
       attachments: [
         {
+          mrkdwn_in: ['text'],
           color: 'good',
-          pretext: `<@${requesterSlackUser.slack_id}> wants you to review this`,
+          pretext: `<@${
+            requesterSlackUser.slack_id
+          }> requested a review from you`,
           author_name: pullRequest.user.login,
           author_link: pullRequest.user.html_url,
           author_icon: pullRequest.user.avatar_url,
           title: pullRequest.title,
           title_link: pullRequest.html_url,
-          text: pullRequest.body,
+          text: `${pullRequest.body}`,
           footer: repository.full_name,
           thumb_url: repository.html_url,
-          ts: '123456789',
+          // ts: (new Date(pullRequest.created_at).getTime() / 1000).toString(),
+        },
+        {
+          author_name: `:keyboard: ${pullRequest.changed_files} file${
+            pullRequest.changed_files === 1 ? '' : 's'
+          } changed · ${pullRequest.additions} addition${
+            pullRequest.additions === 1 ? '' : 's'
+          } · ${pullRequest.deletions} deletion${
+            pullRequest.deletions === 1 ? '' : 's'
+          }`,
+          text: ' ',
         },
       ],
     });
