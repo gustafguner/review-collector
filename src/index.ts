@@ -5,12 +5,12 @@ import * as cors from 'cors';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-const { createEventAdapter } = require('@slack/events-api');
-const { createMessageAdapter } = require('@slack/interactive-messages');
-
 import * as commands from './routes/commands';
 import * as slack from './routes/slack';
 import * as github from './routes/github';
+
+const { createEventAdapter } = require('@slack/events-api');
+const { createMessageAdapter } = require('@slack/interactive-messages');
 
 if (
   !process.env.MONGODB_URL ||
@@ -19,13 +19,15 @@ if (
   !process.env.SLACK_BOT_TOKEN ||
   !process.env.SLACK_APP_SIGNING_SECRET ||
   !process.env.SLACK_APP_CLIENT_ID ||
-  !process.env.SLACK_APP_CLIENT_SECRET
+  !process.env.SLACK_APP_CLIENT_SECRET ||
+  !process.env.GITHUB_CLIENT_ID ||
+  !process.env.GITHUB_SLACK_CLIENT_SECRET
 ) {
   throw new Error('❌ Your .env file is insufficient');
 }
 
 mongoose
-  .connect(process.env.MONGODB_URL!, {
+  .connect(process.env.MONGODB_URL, {
     auth: {
       user: process.env.MONGODB_USERNAME,
       password: process.env.MONGODB_PASSWORD,
