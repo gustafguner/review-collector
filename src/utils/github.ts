@@ -36,7 +36,7 @@ class GitHub {
           'pull_request_review_comment',
         ],
         config: {
-          url: 'https://review-collector.serveo.net/github/webhook',
+          url: 'https://review-collector.localtunnel.me/github/webhook',
           content_type: 'json',
         },
       },

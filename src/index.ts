@@ -14,6 +14,8 @@ import { ITeam } from './models/interfaces/team';
 const { createEventAdapter } = require('@slack/events-api');
 const { createMessageAdapter } = require('@slack/interactive-messages');
 
+import * as commands from './routes/commands';
+
 if (
   !process.env.MONGODB_URL ||
   !process.env.MONGODB_USERNAME ||
@@ -59,225 +61,15 @@ app.use(cors());
 
 const PORT = process.env.PORT || 4000;
 
-app.post('/commands/connect', async (req, res) => {
-  const slackUserId = req.body.user_id;
-  const channelId = req.body.channel_id;
-  const teamId = req.body.team_id;
-
-  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
-
-  if (err || !team || !team.github_access_token) {
-    console.log('Error finding team');
-    return;
-  }
-
-  const message = {
-    text: `Please connect your Slack username to your GitHub username`,
-    attachment_type: 'default',
-    attachments: [
-      {
-        callback_id: 'github_connect',
-        text: '',
-        color: 'good',
-        actions: [
-          {
-            name: 'github_connect',
-            style: 'primary',
-            text: 'Connect with GitHub',
-            type: 'button',
-            value: 'connect',
-            url: `https://github.com/login/oauth/authorize?client_id=16466a53ce26b858fa89&scope=user&redirect_uri=http://localhost:4000/github/slack/oauth2/redirect?payload=${
-              team._id
-            }$${slackUserId}`,
-          },
-        ],
-      },
-    ],
-  };
-
-  res.status(200).json(message);
-});
-
-app.post('/commands/watching', async (req, res) => {
-  const teamId = req.body.team_id;
-  const responseUrl = req.body.response_url;
-
-  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
-
-  if (err || !team || !team.github_access_token) {
-    console.log('Error finding team');
-    return;
-  }
-
-  const repoNames = team.repos.map((repo) => `*${repo.repo_name}*`);
-
-  res.status(200).json({
-    text: ' ',
-    attachments: [
-      {
-        text:
-          repoNames.length !== 0
-            ? `You're watching ${repoNames.join(', ')}`
-            : `You're not watching any repositories.`,
-      },
-    ],
-  });
-});
-
-app.post('/commands/unwatch', async (req, res) => {
-  const teamId = req.body.team_id;
-  const repoName = req.body.text;
-  const responseUrl = req.body.response_url;
-
-  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
-
-  if (err || !team || !team.github_access_token) {
-    console.log('Error finding team');
-    return;
-  }
-
-  const github = new GitHub(team.github_access_token);
-  const [githubUserError, githubUser] = await to(github.getUser());
-
-  if (githubUserError || !githubUser) {
-    console.log('Error getting user');
-    return;
-  }
-
-  const repo = team.repos.find((repo) => repo.repo_name === repoName);
-
-  if (!repo) {
-    console.log('Error finding repo');
-    return;
-  }
-
-  const repoIndex = team.repos.indexOf(repo);
-
-  const [githubRepoErr, githubRepo] = await to(
-    github.getRepoById(repo.repo_id),
-  );
-
-  if (githubRepoErr || !githubRepo) {
-    console.log('Error');
-    return;
-  }
-
-  const [deleteErr] = await to(
-    github.deleteWebhook(
-      githubUser.data.login,
-      githubRepo.data.name,
-      repo.hook_id,
-    ),
-  );
-
-  if (deleteErr) {
-    console.log('Error deleting webhook');
-    return;
-  }
-
-  team.repos.splice(repoIndex, 1);
-
-  const [saveErr] = await to(team.save());
-
-  if (saveErr) {
-    console.log('Error saving team');
-    return;
-  }
-
-  res.status(200).json({
-    text: ' ',
-    attachments: [
-      {
-        color: '#595959',
-        title: 'Stopped watching a repository',
-        text: `You're not watching *${repoName}* anymore :see_no_evil:`,
-      },
-    ],
-  });
-});
-
-app.post('/commands/watch', async (req, res) => {
-  const teamId = req.body.team_id;
-  const repoName = req.body.text;
-  const responseUrl = req.body.response_url;
-
-  const [err, team] = await to(Team.findOne({ slack_team_id: teamId }).exec());
-
-  if (err || !team || !team.github_access_token) {
-    console.log('Error');
-    return;
-  }
-
-  const github = new GitHub(team.github_access_token);
-
-  const [githubUserError, githubUser] = await to(github.getUser());
-
-  if (githubUserError || !githubUser) {
-    console.log('Error');
-    return;
-  }
-
-  const [githubWebhookError, githubWebhook] = await to(
-    github.addWebhook(githubUser.data.login, repoName),
-  );
-
-  if (githubWebhookError || !githubWebhook) {
-    return res.status(200).json({
-      text: ' ',
-      attachments: [
-        {
-          color: 'danger',
-          title: 'Repository not found',
-          text: `I couldn't find that repository. Are you sure you own a repository named *${repoName}*?`,
-        },
-      ],
-    });
-  }
-
-  const [githubRepoError, githubRepo] = await to(
-    github.getRepo(githubUser.data.login, repoName),
-  );
-
-  if (githubRepoError || !githubRepo) {
-    console.log('Error');
-    return;
-  }
-
-  team.repos.push({
-    hook_id: githubWebhook.data.id,
-    repo_name: repoName,
-    repo_id: githubRepo.data.id,
-  });
-
-  const [saveError] = await to(team.save());
-
-  if (saveError) {
-    return res.status(200).json({
-      text: ' ',
-      attachments: [
-        {
-          color: 'danger',
-          title: 'Unexprected error',
-          text: 'An unexpected error occured :crying_cat_face:',
-        },
-      ],
-    });
-  }
-
-  res.status(200).json({
-    text: ' ',
-    attachments: [
-      {
-        color: 'good',
-        title: 'Started watching a repository',
-        text: `You're now watching *${repoName}* :eyes:`,
-      },
-    ],
-  });
-});
+app.use('/commands', commands.router);
 
 app.post('/github/webhook', async (req, res) => {
   const action = req.body.action;
+
+  console.log('😀 WEBHOOK 😀');
+  if (action === 'merged') {
+    console.log(req.body);
+  }
 
   if (action !== 'review_requested' && action !== 'submitted') {
     // review_request_removed?
@@ -338,7 +130,7 @@ app.post('/github/webhook', async (req, res) => {
 
       const reviewStates: ReviewStates = {
         approved: {
-          title: 'Approve',
+          title: 'Approved',
           color: 'good',
         },
         changes_requested: {
@@ -346,7 +138,7 @@ app.post('/github/webhook', async (req, res) => {
           color: 'warning',
         },
         commented: {
-          title: 'Comment',
+          title: 'Commented',
           color: '#595959',
         },
       };
