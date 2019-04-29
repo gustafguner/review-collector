@@ -21,7 +21,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
 
   if (err || !response) {
     console.error(err);
-    return res.redirect('http://localhost:8000/onboarding/error');
+    return res.redirect(`${process.env.FRONTEND_URL}/onboarding/error`);
   }
 
   const body = response.data;
@@ -32,7 +32,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
 
   if (err) {
     console.error(err);
-    return res.redirect('http://localhost:8000/onboarding/error');
+    return res.redirect(`${process.env.FRONTEND_URL}/onboarding/error`);
   }
 
   console.log(body);
@@ -60,10 +60,11 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
 
   if (err || !team) {
     console.error(err);
-    return res.redirect('http://localhost:8000/onboarding/error');
+    return res.redirect(`${process.env.FRONTEND_URL}/onboarding/error`);
   }
-
-  return res.redirect(`http://localhost:8000/onboarding/github?id=${team._id}`);
+  return res.redirect(
+    `${process.env.FRONTEND_URL}/onboarding/github?id=${team._id}`,
+  );
 };
 
 export default oauth2Redirect;

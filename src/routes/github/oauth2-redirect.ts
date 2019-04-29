@@ -37,7 +37,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
     return res.json({ success: false });
   }
 
-  return res.redirect('http://localhost:8000/onboarding/done');
+  return res.redirect(`${process.env.FRONTEND_URL}/onboarding/done`);
 };
 
 export default oauth2Redirect;

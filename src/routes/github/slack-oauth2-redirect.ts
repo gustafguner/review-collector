@@ -95,7 +95,7 @@ const slackOuath2Redirect: express.RequestHandler = async (req, res) => {
     ],
   });
 
-  res.redirect('http://localhost:8000/onboarding/done'); // TODO: change
+  res.redirect(`${process.env.FRONTEND_URL}/onboarding/done`);
 };
 
 export default slackOuath2Redirect;
