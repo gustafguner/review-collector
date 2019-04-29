@@ -9,6 +9,7 @@ const web = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 const slackOuath2Redirect: express.RequestHandler = async (req, res) => {
   const payload = req.query.payload;
+  console.log('Payload: ', payload);
   const teamId = payload.split('$')[0];
   const slackUserId = payload.split('$')[1];
   const code = req.query.code;
