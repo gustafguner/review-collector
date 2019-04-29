@@ -28,9 +28,9 @@ const connect: express.RequestHandler = async (req, res) => {
             text: 'Connect with GitHub',
             type: 'button',
             value: 'connect',
-            url: `https://github.com/login/oauth/authorize?client_id=16466a53ce26b858fa89&scope=read:user&redirect_uri=http://localhost:4000/github/slack/oauth2/redirect?payload=${
-              team._id
-            }$${slackUserId}`,
+            url: `https://github.com/login/oauth/authorize?client_id=16466a53ce26b858fa89&scope=read:user&redirect_uri=${
+              process.env.BACKEND_URL
+            }/slack/oauth2/redirect?payload=${team._id}$${slackUserId}`,
           },
         ],
       },
