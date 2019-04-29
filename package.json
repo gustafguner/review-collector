@@ -1,12 +1,13 @@
 {
   "name": "slack-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "repository": "",
   "license": "MIT",
   "scripts": {
-    "start": "ts-node ./src",
+    "start": "node ./dist/index.js",
     "build": "tsc",
+    "postinstall": "yarn build",
     "watch": "nodemon --watch 'src/**/*.ts' --ignore 'src/**/*.spec.ts' --exec 'ts-node' src/index.ts",
     "lint": "tslint \"src/**/*.{ts,tsx}\""
   },

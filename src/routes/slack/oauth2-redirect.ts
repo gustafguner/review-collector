@@ -20,6 +20,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
   );
 
   if (err || !response) {
+    console.error(err);
     return res.redirect('http://localhost:8000/onboarding/error');
   }
 
@@ -30,6 +31,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
   );
 
   if (err) {
+    console.error(err);
     return res.redirect('http://localhost:8000/onboarding/error');
   }
 
@@ -57,6 +59,7 @@ const oauth2Redirect: express.RequestHandler = async (req, res) => {
   }
 
   if (err || !team) {
+    console.error(err);
     return res.redirect('http://localhost:8000/onboarding/error');
   }
 
