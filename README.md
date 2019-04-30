@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://review-collector.netlify.com/">
-    <img src="https://i.imgur.com/5MQP334.png" alt="Review Collector Logo" style="max-width: 500px; width: 100%;">
+    <img src="https://i.imgur.com/5MQP334.png" alt="Review Collector Logo" width="500">
   </a>
 </p>
 
@@ -30,8 +30,46 @@ Once installed, Review Collector will be able to watch for necessary events insi
 
 All users who wish to either send or recieve review notifications must run the slash-command `/connect`. You will be prompted with the following:
 
-<img src="https://i.imgur.com/IrBYCAk.png">
+<img src="https://i.imgur.com/IrBYCAk.png" width="500">
 
 After having clicked the "Connect with GitHub" button and proceeded with the authorization process you should be notified by Review Collector that the connection was successfull.
 
-<img src="https://i.imgur.com/JpGLEzV.png">
+<img src="https://i.imgur.com/JpGLEzV.png" width="500">
+
+## Usage
+
+### Commands
+These are the available commands:
+
+* `/connect` – Connects your Slack user to your GitHub user allowing Review Collector to notify you and send notifications from you.
+* `/watch <repo-name>` – Tells Review Collector to start watching a repository. 
+* `/unwatch <repo-name>` – Tells Review Collector to stop watching a repository.
+* `/watching` – Lists all repositories you're currently watching.
+
+### Example usage
+
+Let's demonstrate the basic flow of Review Collector. 
+
+Suppose I have installed Review Collector in my Slack workspace and all of my colleagues have connected their Slack user to their GitHub user with `/connect`. We are working on a repository called `test-repo` and want Review Collector to handle its review requests. To tell Review Collector to start watching it I run
+
+```
+/watch test-repo
+```
+
+If everything goes well, Review Collector will respond to you
+
+<img src="https://i.imgur.com/EIUhs33.png" width="500">
+
+Now I'm going to create a pull request and add one of my colleagues **qwertylorem** as a reviewer.
+
+<img src="https://i.imgur.com/PeX8onL.png" width="500">
+
+**qwertylorem** (@Lorem on Slack) instantly gets notified about this.
+
+<img src="https://i.imgur.com/lvRuaxS.png" width="500">
+
+After a little while, Review Collector notifies me, telling me that @Lorem has approved my pull request.
+
+<img src="https://i.imgur.com/cTLsUxh.png" width="500">
+
+With my approving review I decide to merge my pull request! 🎉
